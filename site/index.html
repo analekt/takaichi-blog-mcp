@@ -1,0 +1,384 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>takaichi-blog-mcp — Wayback Machine から高市早苗ブログを LLM へ</title>
+<meta name="description" content="公式サイトから削除された高市早苗氏のブログ記事を Wayback Machine から取得し、LLM に提供する MCP サーバ。pip install で導入、Markdown 形式でローカル保管、出典 URL 付き。">
+<meta property="og:title" content="takaichi-blog-mcp">
+<meta property="og:description" content="Wayback Machine から高市早苗ブログ約1,024件を取得し LLM へ提供する MCP サーバ">
+<meta property="og:type" content="website">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Shippori+Mincho:wght@500;600;700;800&family=Zen+Kaku+Gothic+New:wght@400;500;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --ink:#1a1714;
+    --ink-soft:#4a443d;
+    --paper:#f4efe6;
+    --paper-deep:#ebe3d5;
+    --paper-card:#fbf8f1;
+    --vermilion:#c8442a;
+    --vermilion-deep:#9e2f1c;
+    --seal:#b8371f;
+    --rule:#d8cdb9;
+    --gold:#9a7b3f;
+    --mono:'JetBrains Mono',ui-monospace,monospace;
+    --serif:'Shippori Mincho',serif;
+    --sans:'Zen Kaku Gothic New',sans-serif;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html{scroll-behavior:smooth}
+  body{
+    background:var(--paper);
+    color:var(--ink);
+    font-family:var(--sans);
+    line-height:1.8;
+    -webkit-font-smoothing:antialiased;
+    overflow-x:hidden;
+    background-image:
+      radial-gradient(circle at 12% 18%, rgba(200,68,42,.04), transparent 30%),
+      radial-gradient(circle at 88% 72%, rgba(154,123,63,.05), transparent 35%),
+      url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2'/%3E%3C/filter%3E%3Crect width='120' height='120' filter='url(%23n)' opacity='0.025'/%3E%3C/svg%3E");
+  }
+  a{color:inherit}
+  ::selection{background:var(--vermilion);color:var(--paper)}
+
+  .wrap{max-width:1080px;margin:0 auto;padding:0 28px}
+
+  /* ── top bar ── */
+  .topbar{
+    display:flex;justify-content:space-between;align-items:center;
+    padding:22px 28px;max-width:1080px;margin:0 auto;
+    border-bottom:1px solid var(--rule);
+    position:sticky;top:0;z-index:50;
+    background:rgba(244,239,230,.82);backdrop-filter:blur(8px);
+  }
+  .brand{font-family:var(--mono);font-weight:700;font-size:.95rem;letter-spacing:.02em;display:flex;align-items:center;gap:9px}
+  .brand .dot{width:9px;height:9px;background:var(--vermilion);border-radius:50%;box-shadow:0 0 0 3px rgba(200,68,42,.18)}
+  .topbar nav{display:flex;gap:26px;font-size:.82rem;font-weight:500}
+  .topbar nav a{text-decoration:none;color:var(--ink-soft);transition:color .2s}
+  .topbar nav a:hover{color:var(--vermilion)}
+  @media(max-width:720px){.topbar nav{display:none}}
+
+  /* ── hero ── */
+  .hero{position:relative;padding:88px 0 70px}
+  .stamp{
+    position:absolute;top:40px;right:28px;
+    font-family:var(--mono);font-size:.66rem;letter-spacing:.18em;
+    color:var(--seal);border:1.5px solid var(--seal);border-radius:5px;
+    padding:9px 13px;transform:rotate(7deg);text-align:center;line-height:1.5;
+    opacity:.85;
+  }
+  .stamp b{display:block;font-size:.82rem;letter-spacing:.1em}
+  @media(max-width:720px){.stamp{display:none}}
+
+  .kicker{
+    font-family:var(--mono);font-size:.78rem;letter-spacing:.22em;
+    color:var(--vermilion-deep);text-transform:uppercase;margin-bottom:26px;
+    display:flex;align-items:center;gap:12px;
+  }
+  .kicker::before{content:"";width:34px;height:1.5px;background:var(--vermilion)}
+  h1{
+    font-family:var(--serif);font-weight:800;
+    font-size:clamp(2.7rem,7vw,5rem);line-height:1.12;letter-spacing:-.01em;
+    margin-bottom:28px;
+  }
+  h1 .red{color:var(--vermilion);position:relative}
+  h1 .red::after{content:"";position:absolute;left:0;bottom:.08em;width:100%;height:.13em;background:rgba(200,68,42,.22)}
+  .lede{
+    font-size:1.16rem;max-width:640px;color:var(--ink-soft);margin-bottom:40px;
+    font-weight:400;
+  }
+  .lede b{color:var(--ink);font-weight:700}
+  .cta-row{display:flex;gap:16px;flex-wrap:wrap;align-items:center}
+  .btn{
+    font-family:var(--mono);font-weight:700;font-size:.9rem;
+    text-decoration:none;padding:15px 26px;border-radius:7px;
+    transition:transform .18s,box-shadow .18s;display:inline-flex;align-items:center;gap:10px;
+  }
+  .btn-primary{background:var(--ink);color:var(--paper);box-shadow:5px 5px 0 var(--vermilion)}
+  .btn-primary:hover{transform:translate(-2px,-2px);box-shadow:8px 8px 0 var(--vermilion)}
+  .btn-ghost{border:1.5px solid var(--ink);color:var(--ink)}
+  .btn-ghost:hover{background:var(--ink);color:var(--paper)}
+
+  .reveal{opacity:0;transform:translateY(22px);animation:rise .9s cubic-bezier(.2,.7,.2,1) forwards}
+  @keyframes rise{to{opacity:1;transform:none}}
+  .d1{animation-delay:.05s}.d2{animation-delay:.18s}.d3{animation-delay:.31s}.d4{animation-delay:.44s}.d5{animation-delay:.57s}
+
+  /* ── stat strip ── */
+  .stats{
+    display:grid;grid-template-columns:repeat(4,1fr);
+    border-top:1px solid var(--rule);border-bottom:1px solid var(--rule);
+    margin:64px 0 0;
+  }
+  .stat{padding:30px 18px;border-right:1px solid var(--rule);text-align:center}
+  .stat:last-child{border-right:none}
+  .stat .num{font-family:var(--serif);font-weight:800;font-size:2.3rem;color:var(--ink);line-height:1}
+  .stat .num .u{font-size:1rem;color:var(--vermilion);margin-left:3px}
+  .stat .lbl{font-family:var(--mono);font-size:.7rem;letter-spacing:.12em;color:var(--ink-soft);margin-top:10px;text-transform:uppercase}
+  @media(max-width:720px){.stats{grid-template-columns:repeat(2,1fr)}.stat:nth-child(2){border-right:none}.stat:nth-child(1),.stat:nth-child(2){border-bottom:1px solid var(--rule)}}
+
+  /* ── section heads ── */
+  section{padding:82px 0}
+  .sec-head{display:flex;align-items:baseline;gap:18px;margin-bottom:46px}
+  .sec-no{font-family:var(--mono);font-size:.8rem;color:var(--vermilion);font-weight:700}
+  .sec-title{font-family:var(--serif);font-weight:700;font-size:clamp(1.7rem,4vw,2.6rem)}
+
+  /* ── how it works ── */
+  .flow{display:grid;grid-template-columns:1fr 1fr;gap:24px}
+  @media(max-width:720px){.flow{grid-template-columns:1fr}}
+  .card{
+    background:var(--paper-card);border:1px solid var(--rule);border-radius:12px;
+    padding:32px;position:relative;overflow:hidden;
+    transition:transform .25s,box-shadow .25s;
+  }
+  .card:hover{transform:translateY(-4px);box-shadow:0 14px 36px -18px rgba(26,23,20,.4)}
+  .card .tag{font-family:var(--mono);font-size:.7rem;letter-spacing:.1em;color:var(--vermilion-deep);font-weight:700}
+  .card h3{font-family:var(--serif);font-size:1.4rem;font-weight:700;margin:12px 0 14px}
+  .card p{color:var(--ink-soft);font-size:.98rem}
+  .card .big-no{position:absolute;top:-12px;right:14px;font-family:var(--serif);font-weight:800;font-size:5rem;color:rgba(200,68,42,.08)}
+
+  /* ── terminal ── */
+  .term{
+    background:#15120f;border-radius:12px;overflow:hidden;
+    box-shadow:0 24px 60px -28px rgba(26,23,20,.7);border:1px solid #2a2520;
+  }
+  .term-bar{display:flex;align-items:center;gap:8px;padding:13px 16px;background:#1d1915;border-bottom:1px solid #2a2520}
+  .term-bar i{width:11px;height:11px;border-radius:50%;display:inline-block}
+  .term-bar .r{background:#e0584a}.term-bar .y{background:#d9a441}.term-bar .g{background:#5aa86a}
+  .term-bar span{margin-left:10px;font-family:var(--mono);font-size:.74rem;color:#857c70}
+  .term-body{padding:24px 22px;font-family:var(--mono);font-size:.86rem;line-height:1.95;color:#d6cdbf;overflow-x:auto}
+  .term-body .c{color:#7c8f6b}     /* comment */
+  .term-body .p{color:var(--vermilion)}  /* prompt $ */
+  .term-body .k{color:#e0b86a}     /* command */
+  .term-body .o{color:#9fb8c9}     /* output */
+
+  /* ── tools table ── */
+  .tools{display:grid;gap:0;border:1px solid var(--rule);border-radius:12px;overflow:hidden;background:var(--paper-card)}
+  .tool{display:grid;grid-template-columns:280px 1fr;gap:0;border-bottom:1px solid var(--rule)}
+  .tool:last-child{border-bottom:none}
+  .tool:hover{background:var(--paper-deep)}
+  .tool .name{font-family:var(--mono);font-weight:700;font-size:.9rem;color:var(--vermilion-deep);padding:22px 24px;border-right:1px solid var(--rule);display:flex;align-items:center}
+  .tool .desc{padding:22px 24px;color:var(--ink-soft);font-size:.96rem;display:flex;align-items:center}
+  @media(max-width:720px){.tool{grid-template-columns:1fr}.tool .name{border-right:none;border-bottom:1px dashed var(--rule);padding-bottom:12px}.tool .desc{padding-top:12px}}
+
+  /* ── config block ── */
+  .config-grid{display:grid;grid-template-columns:1fr 1fr;gap:24px;align-items:start}
+  @media(max-width:860px){.config-grid{grid-template-columns:1fr}}
+  .note{font-size:.95rem;color:var(--ink-soft)}
+  .note ul{list-style:none;margin-top:18px}
+  .note li{padding:10px 0 10px 26px;position:relative;border-bottom:1px dashed var(--rule)}
+  .note li::before{content:"朱";position:absolute;left:0;top:9px;font-family:var(--serif);font-size:.8rem;color:var(--vermilion);font-weight:700}
+  .note li b{color:var(--ink)}
+
+  /* ── frontmatter sample ── */
+  .yaml{background:var(--paper-card);border:1px solid var(--rule);border-left:4px solid var(--vermilion);border-radius:8px;padding:22px;font-family:var(--mono);font-size:.82rem;line-height:1.9;color:var(--ink-soft);overflow-x:auto}
+  .yaml .key{color:var(--vermilion-deep)}
+  .yaml .url{color:var(--gold);text-decoration:underline;text-underline-offset:2px}
+
+  /* ── footer ── */
+  footer{border-top:1px solid var(--rule);padding:50px 0 70px;margin-top:40px}
+  .foot-grid{display:flex;justify-content:space-between;gap:30px;flex-wrap:wrap;align-items:flex-start}
+  footer .brand{margin-bottom:12px}
+  .foot-note{font-size:.82rem;color:var(--ink-soft);max-width:520px}
+  .foot-links{display:flex;flex-direction:column;gap:10px;font-family:var(--mono);font-size:.82rem}
+  .foot-links a{color:var(--ink-soft);text-decoration:none;transition:color .2s}
+  .foot-links a:hover{color:var(--vermilion)}
+  .disclaimer{margin-top:34px;padding-top:22px;border-top:1px dashed var(--rule);font-size:.76rem;color:var(--ink-soft);line-height:1.7}
+
+  .copy-hint{font-family:var(--mono);font-size:.7rem;color:#857c70;cursor:pointer;user-select:none;float:right}
+  .copy-hint:hover{color:var(--vermilion)}
+</style>
+</head>
+<body>
+
+<header class="topbar">
+  <div class="brand"><span class="dot"></span>takaichi-blog-mcp</div>
+  <nav>
+    <a href="#how">仕組み</a>
+    <a href="#install">インストール</a>
+    <a href="#tools">ツール</a>
+    <a href="#config">設定</a>
+    <a href="https://github.com/analekt/takaichi-blog-mcp">GitHub</a>
+  </nav>
+</header>
+
+<main class="wrap">
+
+  <!-- HERO -->
+  <section class="hero">
+    <div class="stamp reveal d3">ARCHIVED<b>記録</b></div>
+    <div class="kicker reveal d1">Model Context Protocol · Wayback Machine</div>
+    <h1 class="reveal d2">削除された<span class="red">ブログ記事</span>を、<br>LLM の手元に。</h1>
+    <p class="lede reveal d3">
+      高市早苗氏が公式サイトで執筆していたブログ（コラム）約 <b>1,024 件</b>を
+      <b>Wayback Machine</b> から取得し、LLM が検索・参照できる <b>MCP サーバ</b>。
+      記事は公式サイトから削除済みですが、アーカイブから救い出します。
+    </p>
+    <div class="cta-row reveal d4">
+      <a class="btn btn-primary" href="#install">▸ pip install で始める</a>
+      <a class="btn btn-ghost" href="https://github.com/analekt/takaichi-blog-mcp">GitHub で見る</a>
+    </div>
+
+    <div class="stats reveal d5">
+      <div class="stat"><div class="num">1,024<span class="u">件</span></div><div class="lbl">アーカイブ記事</div></div>
+      <div class="stat"><div class="num">2000–25<span class="u">年</span></div><div class="lbl">収録期間</div></div>
+      <div class="stat"><div class="num">4<span class="u">つ</span></div><div class="lbl">MCP ツール</div></div>
+      <div class="stat"><div class="num">stdio</div><div class="lbl">トランスポート</div></div>
+    </div>
+  </section>
+
+  <!-- HOW -->
+  <section id="how">
+    <div class="sec-head"><span class="sec-no">01</span><h2 class="sec-title">仕組み — 2 つの部品</h2></div>
+    <div class="flow">
+      <div class="card">
+        <span class="big-no">取</span>
+        <div class="tag">PROVISIONING CLI</div>
+        <h3>takaichi-blog-fetch</h3>
+        <p>初回に一度だけ実行。Wayback Machine から全記事をダウンロードし、あなたの PC に <b>Markdown 形式</b>で保管します（生 HTML は保存しません）。各記事には出典 URL を付与。</p>
+      </div>
+      <div class="card">
+        <span class="big-no">供</span>
+        <div class="tag">MCP SERVER · stdio</div>
+        <h3>takaichi-blog-mcp</h3>
+        <p>Claude Desktop などがローカルで起動。保存済みデータ<b>のみ</b>を参照するためネットワークアクセスは不要で、高速かつ安定して動作します。</p>
+      </div>
+    </div>
+    <p class="note" style="margin-top:26px">
+      一括ダウンロードは約 1,024 リクエスト（約 20 分）かかるため、<b>サーバ起動処理には含めていません</b>。
+      MCP クライアントの初期化タイムアウトを避けるための設計です。
+    </p>
+  </section>
+
+  <!-- INSTALL -->
+  <section id="install">
+    <div class="sec-head"><span class="sec-no">02</span><h2 class="sec-title">インストール</h2></div>
+    <div class="term">
+      <div class="term-bar"><i class="r"></i><i class="y"></i><i class="g"></i><span>zsh — takaichi-blog-mcp</span>
+        <span class="copy-hint" onclick="copyInstall(this)">⧉ copy</span></div>
+      <div class="term-body" id="install-code"><span class="c"># 1. PyPI からインストール（クローン不要）</span>
+<span class="p">$</span> <span class="k">pip install takaichi-blog-mcp</span>
+
+<span class="c"># 2. ブログ記事を一括ダウンロード（初回のみ・約20分）</span>
+<span class="p">$</span> <span class="k">takaichi-blog-fetch</span>
+<span class="o">Fetching CDX index from Wayback Machine ...
+Found 1024 archived articles.
+Fetching 1024 articles (~20 min) ...
+  [1024/1024] fetched (ok=1024)
+Done. 1024/1024 articles saved.</span>
+
+<span class="c"># 3. 動作確認（通常は MCP クライアントが自動起動）</span>
+<span class="p">$</span> <span class="k">takaichi-blog-mcp --help</span></div>
+    </div>
+    <p class="note" style="margin-top:22px">
+      <b>pipx / uv を使う場合（推奨）:</b> コマンドを隔離環境にインストールできます —
+      <code style="font-family:var(--mono);font-size:.85em">pipx install takaichi-blog-mcp</code> /
+      <code style="font-family:var(--mono);font-size:.85em">uv tool install takaichi-blog-mcp</code>。
+      Python 3.10 以上が必要です。
+    </p>
+  </section>
+
+  <!-- TOOLS -->
+  <section id="tools">
+    <div class="sec-head"><span class="sec-no">03</span><h2 class="sec-title">提供する MCP ツール</h2></div>
+    <div class="tools">
+      <div class="tool"><div class="name">takaichi_list_articles</div><div class="desc">記事メタデータの一覧。カテゴリ・公開日で絞り込み、新しい順、ページング対応。</div></div>
+      <div class="tool"><div class="name">takaichi_list_categories</div><div class="desc">カテゴリ一覧（件数・期間付き）。各カテゴリは当選期に対応します。</div></div>
+      <div class="tool"><div class="name">takaichi_get_article</div><div class="desc">ID を指定して記事本文（Markdown）とメタデータを取得。出典 URL 付き。</div></div>
+      <div class="tool"><div class="name">takaichi_search_articles</div><div class="desc">タイトル＋本文の全文検索（部分一致・日本語対応）。一致箇所の抜粋を返します。</div></div>
+    </div>
+  </section>
+
+  <!-- CONFIG -->
+  <section id="config">
+    <div class="sec-head"><span class="sec-no">04</span><h2 class="sec-title">Claude Desktop に登録</h2></div>
+    <div class="config-grid">
+      <div class="term">
+        <div class="term-bar"><i class="r"></i><i class="y"></i><i class="g"></i><span>claude_desktop_config.json</span></div>
+        <div class="term-body"><span class="o">{
+  <span class="k">"mcpServers"</span>: {
+    <span class="k">"takaichi-blog"</span>: {
+      <span class="k">"command"</span>: <span class="p">"takaichi-blog-mcp"</span>
+    }
+  }
+}</span></div>
+      </div>
+      <div class="note">
+        <p>設定ファイルに上記を追記して Claude Desktop を再起動するだけ。事前に <b>takaichi-blog-fetch</b> でデータをダウンロードしておく必要があります。</p>
+        <ul>
+          <li><b>出典の明示</b> — 各記事に元サイト URL と Wayback URL を保持</li>
+          <li><b>ローカル完結</b> — 起動後はネットワーク不要</li>
+          <li><b>日本語全文検索</b> — 依存ライブラリなしの部分一致</li>
+        </ul>
+      </div>
+    </div>
+
+    <h3 style="font-family:var(--serif);font-weight:700;font-size:1.3rem;margin:46px 0 18px">保存される YAML frontmatter（出典付き）</h3>
+    <div class="yaml"><span class="key">id</span>: 8
+<span class="key">title</span>: ようやく臨時国会が召集されました。
+<span class="key">category</span>: 5期目だ！野党だ！！永田町通信　平成21年10月～平成24年12月
+<span class="key">published_date</span>: 2009-10-26
+<span class="key">archived_date</span>: 2025-10-21
+<span class="key">original_url</span>: <span class="url">https://www.sanae.gr.jp/column_detail8.html</span>
+<span class="key">wayback_url</span>: <span class="url">https://web.archive.org/web/2025…/…column_detail8.html</span></div>
+  </section>
+
+</main>
+
+<footer>
+  <div class="wrap">
+    <div class="foot-grid">
+      <div>
+        <div class="brand"><span class="dot"></span>takaichi-blog-mcp</div>
+        <p class="foot-note">Wayback Machine のアーカイブから救い出した記事を、LLM が扱える形に。研究・参照目的の MCP サーバです。</p>
+      </div>
+      <div class="foot-links">
+        <a href="https://github.com/analekt/takaichi-blog-mcp">→ GitHub リポジトリ</a>
+        <a href="https://pypi.org/project/takaichi-blog-mcp/">→ PyPI パッケージ</a>
+        <a href="https://github.com/analekt/takaichi-blog-dataset">→ 参考データセット</a>
+        <a href="https://web.archive.org/">→ Wayback Machine</a>
+      </div>
+    </div>
+    <p class="disclaimer">
+      本データは Wayback Machine のアーカイブに由来します。記事の著作権は原著者に帰属します。
+      本プロジェクトのソースコードは MIT ライセンスですが、取得される記事内容はライセンス対象外です。
+      取得時は Wayback Machine に過度な負荷をかけないようレート制限を設けています。
+    </p>
+  </div>
+</footer>
+
+<script>
+  // Scroll reveal as PROGRESSIVE ENHANCEMENT: content is visible by default
+  // (see CSS). We only hide-then-reveal when JS + IntersectionObserver exist,
+  // and a safety timeout guarantees everything becomes visible no matter what.
+  (function(){
+    var els = Array.prototype.slice.call(
+      document.querySelectorAll('section .card, .tools, .term, .yaml, .sec-head'));
+    var reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    function show(el){ el.style.opacity='1'; el.style.transform='none'; }
+    if(reduce || !('IntersectionObserver' in window)){ els.forEach(show); return; }
+
+    els.forEach(function(el){
+      el.style.opacity='0'; el.style.transform='translateY(20px)';
+      el.style.transition='opacity .8s cubic-bezier(.2,.7,.2,1), transform .8s cubic-bezier(.2,.7,.2,1)';
+    });
+    var io = new IntersectionObserver(function(entries){
+      entries.forEach(function(e){ if(e.isIntersecting){ show(e.target); io.unobserve(e.target); } });
+    },{threshold:.1, rootMargin:'0px 0px -8% 0px'});
+    els.forEach(function(el){ io.observe(el); });
+
+    // Safety net: reveal anything still hidden after 2.5s.
+    setTimeout(function(){ els.forEach(show); }, 2500);
+  })();
+
+  function copyInstall(btn){
+    const txt = "pip install takaichi-blog-mcp\ntakaichi-blog-fetch\ntakaichi-blog-mcp --help";
+    navigator.clipboard.writeText(txt).then(()=>{
+      const old=btn.textContent; btn.textContent='✓ copied'; setTimeout(()=>btn.textContent=old,1600);
+    });
+  }
+</script>
+</body>
+</html>
