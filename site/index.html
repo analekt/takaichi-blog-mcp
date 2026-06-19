@@ -187,8 +187,9 @@
   .foot-links a:hover{color:var(--vermilion)}
   .disclaimer{margin-top:34px;padding-top:22px;border-top:1px dashed var(--rule);font-size:.76rem;color:var(--ink-soft);line-height:1.7}
 
-  .copy-hint{font-family:var(--mono);font-size:.7rem;color:#857c70;cursor:pointer;user-select:none;float:right}
+  .copy-hint{font-family:var(--mono);font-size:.7rem;color:#857c70;cursor:pointer;user-select:none;float:right;background:none;border:0;padding:2px 4px;border-radius:4px}
   .copy-hint:hover{color:var(--vermilion)}
+  .copy-hint:focus-visible{outline:2px solid var(--vermilion);outline-offset:2px;color:var(--vermilion)}
 </style>
 </head>
 <body>
@@ -257,7 +258,7 @@
     <div class="sec-head"><span class="sec-no">02</span><h2 class="sec-title">インストール</h2></div>
     <div class="term">
       <div class="term-bar"><i class="r"></i><i class="y"></i><i class="g"></i><span>zsh — takaichi-blog-mcp</span>
-        <span class="copy-hint" onclick="copyInstall(this)">⧉ copy</span></div>
+        <button type="button" class="copy-hint" onclick="copyInstall(this)" aria-label="インストールコマンドをコピー">⧉ copy</button></div>
       <div class="term-body" id="install-code"><span class="c"># 1. PyPI からインストール（クローン不要）</span>
 <span class="p">$</span> <span class="k">pip install takaichi-blog-mcp</span>
 
@@ -375,9 +376,18 @@ Done. 1024/1024 articles saved.</span>
 
   function copyInstall(btn){
     const txt = "pip install takaichi-blog-mcp\ntakaichi-blog-fetch\ntakaichi-blog-mcp --help";
-    navigator.clipboard.writeText(txt).then(()=>{
-      const old=btn.textContent; btn.textContent='✓ copied'; setTimeout(()=>btn.textContent=old,1600);
-    });
+    var flash = function(msg){ var old=btn.textContent; btn.textContent=msg; setTimeout(function(){btn.textContent=old;},1600); };
+    if(navigator.clipboard && navigator.clipboard.writeText){
+      navigator.clipboard.writeText(txt).then(function(){ flash('✓ copied'); })
+        .catch(function(){ flash('⚠ コピー失敗'); });
+    } else {
+      // Fallback for non-secure / older contexts.
+      try{
+        var ta=document.createElement('textarea'); ta.value=txt; ta.style.position='fixed'; ta.style.opacity='0';
+        document.body.appendChild(ta); ta.select(); document.execCommand('copy'); document.body.removeChild(ta);
+        flash('✓ copied');
+      }catch(e){ flash('⚠ コピー失敗'); }
+    }
   }
 </script>
 </body>
