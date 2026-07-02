@@ -71,6 +71,22 @@ async def test_retry_gives_up_after_max_retries() -> None:
     assert client.calls == config.MAX_RETRIES + 1
 
 
+async def test_404_fails_fast_without_retry() -> None:
+    # Non-transient 4xx must not be retried.
+    client = FakeClient([_response(404), _response(200, text="unused")])
+    with pytest.raises(httpx.HTTPStatusError):
+        await wayback._request_with_retry(client, "https://x")
+    assert client.calls == 1  # no retry
+
+
+async def test_500_is_retried() -> None:
+    # Server-side 5xx is transient and should be retried.
+    client = FakeClient([_response(500), _response(200, text="ok")])
+    resp = await wayback._request_with_retry(client, "https://x")
+    assert resp.status_code == 200
+    assert client.calls == 2
+
+
 async def test_fetch_cdx_index_reduces_rows() -> None:
     rows = [
         ["original", "timestamp"],

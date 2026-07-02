@@ -83,26 +83,40 @@ def select_latest_per_article(rows: List[List[str]]) -> List[Dict[str, Any]]:
     return result
 
 
+def _is_transient(exc: Exception) -> bool:
+    """Whether an error is worth retrying.
+
+    Transient: connection/timeout errors, HTTP 429 (rate limit) and any 5xx
+    (server-side). Non-transient: other 4xx such as 404/403 — retrying those
+    just wastes time and load, so they should fail fast.
+    """
+    if isinstance(exc, httpx.TransportError):
+        return True
+    if isinstance(exc, httpx.HTTPStatusError):
+        status = exc.response.status_code
+        return status == 429 or 500 <= status <= 599
+    return False
+
+
 async def _request_with_retry(
     client: httpx.AsyncClient,
     url: str,
     *,
     params: Optional[dict] = None,
 ) -> httpx.Response:
-    """GET ``url`` with exponential-backoff retry on 429/503 and timeouts."""
+    """GET ``url``, retrying only transient failures with exponential backoff.
+
+    Non-transient HTTP errors (e.g. 404) are raised immediately without retry.
+    """
     last_exc: Optional[Exception] = None
     for attempt in range(config.MAX_RETRIES + 1):
         try:
             response = await client.get(url, params=params)
-            if response.status_code in (429, 503):
-                raise httpx.HTTPStatusError(
-                    f"Transient {response.status_code}",
-                    request=response.request,
-                    response=response,
-                )
             response.raise_for_status()
             return response
         except (httpx.HTTPStatusError, httpx.TransportError) as exc:
+            if not _is_transient(exc):
+                raise  # fail fast on 404/403/etc.
             last_exc = exc
             if attempt >= config.MAX_RETRIES:
                 break
